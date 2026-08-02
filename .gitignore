@@ -149,6 +149,8 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
 .envrc
 .venv
 env/
@@ -156,6 +158,15 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Generated catalog exports
+data/exports/*.json
+data/exports/*.tmp
+data/tennis-db/
+
+# OS and editor-local files
+.DS_Store
+.vscode/
 
 # Spyder project settings
 .spyderproject
