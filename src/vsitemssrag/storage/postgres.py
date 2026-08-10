@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,18 @@ def variant_source_key(variant: Mapping[str, Any]) -> str:
     name = str(variant.get("name") or "").strip()
     digest = hashlib.sha256(name.encode("utf-8")).hexdigest()
     return f"name:{digest}"
+
+
+def vector_literal(values: Sequence[float], dimensions: int = 768) -> str:
+    if len(values) != dimensions:
+        raise ValueError(
+            f"ожидался вектор размерности {dimensions}, получено {len(values)}"
+        )
+
+    parsed = [float(value) for value in values]
+    if not all(math.isfinite(value) for value in parsed):
+        raise ValueError("вектор содержит NaN или Infinity")
+    return "[" + ",".join(format(value, ".9g") for value in parsed) + "]"
 
 
 class Database:
@@ -324,3 +337,95 @@ class Database:
             "select count(*) from public.product_variants"
         ).fetchone()[0]
         return products, available, variants
+
+    def products_for_embedding(
+        self,
+        *,
+        model: str,
+        limit: int = 0,
+        force: bool = False,
+    ) -> list[dict[str, Any]]:
+        sql = """
+            select
+                products.id,
+                products.name,
+                products.brand,
+                products.description,
+                products.characteristics,
+                products.content_hash
+            from public.products as products
+            left join public.product_embeddings as embeddings
+                on embeddings.product_id = products.id
+            where products.available
+              and (
+                  %s
+                  or embeddings.product_id is null
+                  or embeddings.model is distinct from %s
+                  or embeddings.content_hash is distinct from products.content_hash
+              )
+            order by products.id
+        """
+        parameters: list[Any] = [force, model]
+        if limit:
+            sql += " limit %s"
+            parameters.append(limit)
+
+        cursor = self.connection.execute(sql, parameters)
+        columns = [column.name for column in cursor.description]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+
+    def upsert_product_embedding(
+        self,
+        *,
+        product_id: int,
+        model: str,
+        content_hash: str,
+        content: str,
+        embedding: Sequence[float],
+    ) -> None:
+        self.connection.execute(
+            """
+            insert into public.product_embeddings (
+                product_id, model, dimensions, content_hash, content, embedding
+            ) values (
+                %s, %s, 768, %s, %s, %s::extensions.vector(768)
+            )
+            on conflict (product_id) do update set
+                model = excluded.model,
+                dimensions = excluded.dimensions,
+                content_hash = excluded.content_hash,
+                content = excluded.content,
+                embedding = excluded.embedding,
+                updated_at = now()
+            """,
+            (
+                product_id,
+                model,
+                content_hash,
+                content,
+                vector_literal(embedding),
+            ),
+        )
+
+    def match_products(
+        self,
+        embedding: Sequence[float],
+        *,
+        model: str,
+        limit: int = 5,
+        only_available: bool = True,
+    ) -> list[dict[str, Any]]:
+        cursor = self.connection.execute(
+            """
+            select *
+            from public.match_products(
+                %s::extensions.vector(768),
+                %s,
+                %s,
+                %s
+            )
+            """,
+            (vector_literal(embedding), model, limit, only_available),
+        )
+        columns = [column.name for column in cursor.description]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]

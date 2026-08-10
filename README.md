@@ -67,8 +67,48 @@ uv run vsitemssrag scrape --storage both --limit 10
 ```env
 GEMINI_API_KEY=
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/postgres
-LANCEDB_URI=./data/tennis-db
 ```
+
+## Векторное хранилище
+
+Команда миграции включает расширение `pgvector` в Supabase и создаёт таблицу
+`public.product_embeddings`:
+
+```bash
+uv run vsitemssrag db migrate
+```
+
+Для embeddings выбрана модель `gemini-embedding-2` с размерностью 768. Таблица
+хранит один актуальный embedding на товар вместе с моделью, исходным текстом и
+`content_hash`. Поиск использует cosine distance через HNSW-индекс и серверную
+функцию `public.match_products`. На таблице включён RLS без клиентских политик.
+
+Сразу после миграции таблица пуста. Её заполняет отдельный embedding pipeline,
+который будет обрабатывать только товары с новым или изменившимся
+`content_hash`.
+
+Создайте ключ на странице [Google AI Studio API Keys](https://aistudio.google.com/app/apikey)
+и сохраните его только в локальном `.env`:
+
+```env
+GEMINI_API_KEY=your-key
+```
+
+Безопасный пробный запуск обрабатывает три товара:
+
+```bash
+uv run vsitemssrag embed
+uv run vsitemssrag search "контрольное основание для новичка"
+```
+
+После проверки качества можно обработать все ожидающие товары:
+
+```bash
+uv run vsitemssrag embed --limit 0
+```
+
+Цена и наличие не входят в embedding-текст: semantic search отвечает за смысл,
+а изменчивые и точные ограничения применяются к актуальным полям PostgreSQL.
 
 ## Структура проекта
 

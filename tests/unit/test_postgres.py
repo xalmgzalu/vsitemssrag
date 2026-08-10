@@ -1,6 +1,10 @@
 import unittest
 
-from vsitemssrag.storage.postgres import product_content_hash, variant_source_key
+from vsitemssrag.storage.postgres import (
+    product_content_hash,
+    variant_source_key,
+    vector_literal,
+)
 
 
 class ProductContentHashTests(unittest.TestCase):
@@ -43,6 +47,15 @@ class VariantSourceKeyTests(unittest.TestCase):
 
         self.assertEqual(first, second)
         self.assertTrue(first.startswith("name:"))
+
+
+class VectorLiteralTests(unittest.TestCase):
+    def test_formats_finite_vector(self):
+        self.assertEqual(vector_literal([0.25, -1], dimensions=2), "[0.25,-1]")
+
+    def test_rejects_wrong_dimensions(self):
+        with self.assertRaises(ValueError):
+            vector_literal([1], dimensions=2)
 
 
 if __name__ == "__main__":

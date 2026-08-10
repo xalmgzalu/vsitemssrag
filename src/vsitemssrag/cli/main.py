@@ -6,6 +6,7 @@ import argparse
 from collections.abc import Sequence
 
 from vsitemssrag.cli import database as database_cli
+from vsitemssrag.cli import embeddings as embeddings_cli
 from vsitemssrag.cli import scrape as scrape_cli
 
 
@@ -21,6 +22,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     database_parser = commands.add_parser("db", help="управление PostgreSQL")
     database_cli.configure_parser(database_parser)
+
+    embed_parser = commands.add_parser(
+        "embed", help="построить embeddings товаров"
+    )
+    embeddings_cli.configure_embed_parser(embed_parser)
+
+    search_parser = commands.add_parser(
+        "search", help="семантический поиск по каталогу"
+    )
+    embeddings_cli.configure_search_parser(search_parser)
     return parser
 
 

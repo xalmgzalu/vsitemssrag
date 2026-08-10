@@ -19,6 +19,22 @@ class CliParserTests(unittest.TestCase):
         self.assertEqual(args.command, "db")
         self.assertEqual(args.database_command, "status")
 
+    def test_embed_command_defaults_to_safe_limit(self):
+        args = build_parser().parse_args(["embed"])
+
+        self.assertEqual(args.command, "embed")
+        self.assertEqual(args.limit, 3)
+        self.assertFalse(args.force)
+
+    def test_search_command(self):
+        args = build_parser().parse_args(
+            ["search", "контрольное основание", "--limit", "7"]
+        )
+
+        self.assertEqual(args.command, "search")
+        self.assertEqual(args.query, "контрольное основание")
+        self.assertEqual(args.limit, 7)
+
 
 if __name__ == "__main__":
     unittest.main()
