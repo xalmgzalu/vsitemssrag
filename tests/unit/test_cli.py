@@ -35,6 +35,16 @@ class CliParserTests(unittest.TestCase):
         self.assertEqual(args.query, "контрольное основание")
         self.assertEqual(args.limit, 7)
 
+    def test_ask_command(self):
+        args = build_parser().parse_args(
+            ["ask", "что выбрать новичку?", "--limit", "8"]
+        )
+
+        self.assertEqual(args.command, "ask")
+        self.assertEqual(args.question, "что выбрать новичку?")
+        self.assertEqual(args.limit, 8)
+        self.assertEqual(args.max_output_tokens, 1200)
+
 
 if __name__ == "__main__":
     unittest.main()

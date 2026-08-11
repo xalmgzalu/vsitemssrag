@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from vsitemssrag.cli import database as database_cli
 from vsitemssrag.cli import embeddings as embeddings_cli
+from vsitemssrag.cli import rag as rag_cli
 from vsitemssrag.cli import scrape as scrape_cli
 
 
@@ -32,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
         "search", help="семантический поиск по каталогу"
     )
     embeddings_cli.configure_search_parser(search_parser)
+
+    ask_parser = commands.add_parser(
+        "ask", help="получить grounded-рекомендацию по каталогу"
+    )
+    rag_cli.configure_parser(ask_parser)
     return parser
 
 
