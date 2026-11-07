@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 import psycopg
 import requests
@@ -17,13 +21,14 @@ from vsitemssrag.embeddings import (
     build_search_query,
 )
 from vsitemssrag.rag import (
+    CLARIFYING_QUESTION,
     GENERATION_MODEL,
-    RAG_SYSTEM_INSTRUCTION,
     GeminiGenerationClient,
     GeminiGenerationError,
-    build_rag_prompt,
     extract_max_price_rub,
+    generate_advisor_answer,
     products_within_budget,
+    requires_clarification,
 )
 from vsitemssrag.settings import ConfigurationError, load_env, require_setting
 from vsitemssrag.storage.postgres import Database, redact_secrets
@@ -52,6 +57,11 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
         default=1200,
         help="максимальная длина ответа Gemini (по умолчанию: 1200)",
     )
+    parser.add_argument(
+        "--evidence-file",
+        type=Path,
+        help="JSON пилота внешних отзывов; используются только matched-сопоставления",
+    )
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.set_defaults(handler=run_ask)
 
@@ -61,14 +71,62 @@ def _generation_model(cli_model: str | None) -> str:
     return cli_model or os.getenv("GEMINI_GENERATION_MODEL", "").strip() or GENERATION_MODEL
 
 
+def load_community_evidence(path: Path | None) -> dict[int, dict[str, Any]]:
+    """Загрузить только автоматически принятые или вручную проверенные match."""
+    if path is None:
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    raw_products = payload.get("products") if isinstance(payload, Mapping) else None
+    if not isinstance(raw_products, list):
+        raise ValueError("evidence-файл не содержит список products")
+
+    evidence_by_id: dict[int, dict[str, Any]] = {}
+    for product in raw_products:
+        if not isinstance(product, Mapping):
+            continue
+        match = product.get("match")
+        if not isinstance(match, Mapping) or match.get("status") != "matched":
+            continue
+        evidence = match.get("evidence")
+        if not isinstance(evidence, Mapping):
+            continue
+        try:
+            product_id = int(product["product_id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        evidence_by_id[product_id] = dict(evidence)
+    return evidence_by_id
+
+
+def attach_community_evidence(
+    products: Sequence[Mapping[str, Any]],
+    evidence_by_id: Mapping[int, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for product in products:
+        item = dict(product)
+        try:
+            evidence = evidence_by_id.get(int(product.get("product_id")))
+        except (TypeError, ValueError):
+            evidence = None
+        if evidence is not None:
+            item["community_evidence"] = dict(evidence)
+        enriched.append(item)
+    return enriched
+
+
 def run_ask(args: argparse.Namespace) -> int:
     if args.timeout <= 0:
         print("Ошибка: timeout должен быть > 0", file=sys.stderr)
         return 2
+    if requires_clarification(args.question):
+        print(CLARIFYING_QUESTION)
+        return 0
 
     try:
         api_key = require_setting("GEMINI_API_KEY")
         model = _generation_model(args.model)
+        evidence_by_id = load_community_evidence(args.evidence_file)
         search_query = build_search_query(args.question)
         max_price = extract_max_price_rub(args.question)
 
@@ -101,15 +159,17 @@ def run_ask(args: argparse.Namespace) -> int:
             print("Подходящие товары не найдены. Сначала запустите команду embed.")
             return 0
 
-        prompt = build_rag_prompt(args.question, products)
+        products = attach_community_evidence(products, evidence_by_id)
+
         with GeminiGenerationClient(
             api_key,
             model=model,
             timeout=args.timeout,
         ) as client:
-            answer = client.generate(
-                prompt,
-                system_instruction=RAG_SYSTEM_INSTRUCTION,
+            answer = generate_advisor_answer(
+                client,
+                args.question,
+                products,
                 max_output_tokens=args.max_output_tokens,
             )
     except (
@@ -129,4 +189,7 @@ def run_ask(args: argparse.Namespace) -> int:
         price = format_price(product.get("price"), product.get("currency"))
         print(f"[{index}] {product['name']} — {price}")
         print(f"    {product['source_url']}")
+        evidence = product.get("community_evidence")
+        if isinstance(evidence, Mapping) and evidence.get("source_url"):
+            print(f"    Отзывы: {evidence['source_url']}")
     return 0

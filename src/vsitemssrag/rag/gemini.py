@@ -81,6 +81,7 @@ class GeminiGenerationClient:
                 status_forcelist=RETRYABLE_STATUS_CODES,
                 allowed_methods=frozenset({"POST"}),
                 respect_retry_after_header=True,
+                raise_on_status=False,
             )
             self.session.mount("https://", HTTPAdapter(max_retries=retries))
 
@@ -100,11 +101,20 @@ class GeminiGenerationClient:
         *,
         system_instruction: str,
         max_output_tokens: int = 1200,
+        temperature: float | None = None,
     ) -> str:
         if not prompt.strip() or not system_instruction.strip():
             raise ValueError("prompt и system_instruction не могут быть пустыми")
         if max_output_tokens <= 0:
             raise ValueError("max_output_tokens должен быть больше нуля")
+        if temperature is not None and not 0 <= temperature <= 2:
+            raise ValueError("temperature должна быть от 0 до 2")
+
+        generation_config: dict[str, Any] = {
+            "maxOutputTokens": max_output_tokens,
+        }
+        if temperature is not None:
+            generation_config["temperature"] = temperature
 
         response = self.session.post(
             f"{GEMINI_API_BASE_URL}/{self.model}:generateContent",
@@ -122,9 +132,7 @@ class GeminiGenerationClient:
                         "parts": [{"text": prompt}],
                     }
                 ],
-                "generationConfig": {
-                    "maxOutputTokens": max_output_tokens,
-                },
+                "generationConfig": generation_config,
             },
             timeout=(10, self.timeout),
         )

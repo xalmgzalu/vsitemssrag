@@ -1,0 +1,20 @@
+[
+  {
+    "source_url": "https://www.vistasport.ru/catalog/blades/osnovanie_donic_defplay_classic_senso_v3.html",
+    "external_url": "https://bladerubber.net/blades/donic/defplay-classic-senso",
+    "verification_url": "https://www.donic.com/en/Blades/2833/DONIC-Defplay-Classic-Senso",
+    "reason": "официальное название DONIC опускает суффикс V3 из названия карточки"
+  },
+  {
+    "source_url": "https://www.vistasport.ru/catalog/blades/osnovanie_donic_balsa_carbo_certran_fibre.html",
+    "external_url": "https://bladerubber.net/blades/donic/balsacarbo-certran-fibre",
+    "verification_url": "https://www.donic.com/en/DONIC-BALSA-CARBO-CERTRAN-FIBRE/110292020",
+    "reason": "составное BalsaCarbo в URL внешнего источника соответствует Balsa Carbo"
+  },
+  {
+    "source_url": "https://www.vistasport.ru/catalog/blades/osnovanie_stiga_clipper_wood.html",
+    "external_url": "https://bladerubber.net/blades/stiga/clipper",
+    "verification_url": "https://www.stigasports.com/en/product/clipper-wood",
+    "reason": "производитель использует полное название Clipper Wood, внешний источник — краткое Clipper"
+  }
+]

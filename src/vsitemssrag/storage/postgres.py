@@ -338,6 +338,18 @@ class Database:
         ).fetchone()[0]
         return products, available, variants
 
+    def available_products_for_enrichment(self) -> list[dict[str, Any]]:
+        cursor = self.connection.execute(
+            """
+            select id, name, brand, source_url
+            from public.products
+            where available
+            order by id
+            """
+        )
+        columns = [column.name for column in cursor.description]
+        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+
     def products_for_embedding(
         self,
         *,

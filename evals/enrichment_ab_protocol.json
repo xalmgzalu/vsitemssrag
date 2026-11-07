@@ -1,0 +1,54 @@
+{
+  "experiment_id": "community_evidence_pilot_v4",
+  "conditions": {
+    "baseline": "VistaSport retrieval and catalog fields only",
+    "enriched": "Same retrieval, model, system instruction and temperature, plus matched community aggregates"
+  },
+  "controls": {
+    "case_count": 5,
+    "context_products": 6,
+    "repetitions_per_condition": 3,
+    "temperature": 0,
+    "generation_request_interval_seconds": 15,
+    "deterministic_clarification_guard": true,
+    "long_pips_evidence": "directional_positive_negative_unclear",
+    "evidence_sentences": "code_rendered_and_generation_validated",
+    "long_pips_requires_explicit_no_positive_evidence_disclaimer": true,
+    "cross_brand_comparative_language_validated": true,
+    "evidence_validation": "product_plus_semantic_plus_n_of_m",
+    "raw_review_text_allowed": false,
+    "candidate_matches_allowed": false
+  },
+  "primary_metric": "fully passed case generations / all case generations",
+  "secondary_metrics": [
+    "per-case pass rate",
+    "matched product coverage",
+    "matched products with sampled reviews",
+    "review count sampled",
+    "signal product coverage"
+  ],
+  "case_requirements": {
+    "beginner_control_budget": [
+      "at least one cited product",
+      "all cited products cost at most 6000 RUB",
+      "answer addresses control"
+    ],
+    "fast_attack_carbon": [
+      "all cited products have an explicit carbon/composite marker",
+      "multiple manufacturer scales get an explicit non-comparability caveat",
+      "no unsupported fastest/speed-maximum claim"
+    ],
+    "defense_long_pips": [
+      "compatibility is either withheld for insufficient data or tied to an exact N-of-M review aggregate",
+      "available long-pips evidence must be used"
+    ],
+    "soft_inner_carbon": [
+      "answer addresses soft feel",
+      "soft feel is tied to a direct field/exact aggregate or explicitly withheld"
+    ],
+    "underspecified_request": [
+      "no product is recommended before clarification",
+      "exactly one relevant clarifying question"
+    ]
+  }
+}

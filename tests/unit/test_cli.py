@@ -35,15 +35,30 @@ class CliParserTests(unittest.TestCase):
         self.assertEqual(args.query, "контрольное основание")
         self.assertEqual(args.limit, 7)
 
+    def test_enrichment_command_defaults_to_limited_pilot(self):
+        args = build_parser().parse_args(["enrich-reviews"])
+
+        self.assertEqual(args.command, "enrich-reviews")
+        self.assertEqual(args.limit, 20)
+        self.assertEqual(args.max_reviews, 20)
+
     def test_ask_command(self):
         args = build_parser().parse_args(
-            ["ask", "что выбрать новичку?", "--limit", "8"]
+            [
+                "ask",
+                "что выбрать новичку?",
+                "--limit",
+                "8",
+                "--evidence-file",
+                "pilot.json",
+            ]
         )
 
         self.assertEqual(args.command, "ask")
         self.assertEqual(args.question, "что выбрать новичку?")
         self.assertEqual(args.limit, 8)
         self.assertEqual(args.max_output_tokens, 1200)
+        self.assertEqual(str(args.evidence_file), "pilot.json")
 
 
 if __name__ == "__main__":

@@ -4,8 +4,10 @@ from decimal import Decimal
 from pathlib import Path
 
 from vsitemssrag.rag.constraints import (
+    CLARIFYING_QUESTION,
     extract_max_price_rub,
     products_within_budget,
+    requires_clarification,
 )
 from vsitemssrag.rag.context import RAG_SYSTEM_INSTRUCTION, build_rag_prompt
 from vsitemssrag.rag.gemini import (
@@ -49,9 +51,50 @@ class RagContextTests(unittest.TestCase):
     def test_system_instruction_treats_catalog_as_untrusted_data(self):
         self.assertIn("недоверенные данные", RAG_SYSTEM_INSTRUCTION)
         self.assertIn("не придумывай", RAG_SYSTEM_INSTRUCTION)
+        self.assertIn("не сравнивай числовые показатели", RAG_SYSTEM_INSTRUCTION)
+        self.assertIn("субъективный агрегат", RAG_SYSTEM_INSTRUCTION)
+
+    def test_adds_only_aggregated_community_evidence(self):
+        prompt = build_rag_prompt(
+            "Подойдёт под длинные шипы?",
+            [
+                {
+                    "name": "Test Blade",
+                    "source_url": "https://shop.test/blade",
+                    "community_evidence": {
+                        "source": "Example Reviews",
+                        "source_url": "https://reviews.test/blade",
+                        "reviews_sampled": 5,
+                        "mentions": {
+                            "control": {
+                                "review_count": 2,
+                                "review_urls": ["https://reviews.test/raw"],
+                            }
+                        },
+                        "raw_review_text": "этот текст нельзя передавать",
+                    },
+                }
+            ],
+        )
+
+        catalog = json.loads(prompt.split("\n\nCATALOG_DATA:\n", 1)[1])
+        evidence = catalog[0]["community_evidence"]
+        self.assertIn(
+            "Контроль упоминается в 2 из 5 просмотренных отзывов [1].",
+            evidence["summary_lines"],
+        )
+        self.assertNotIn("raw_review_text", evidence)
+        self.assertNotIn("review_urls", json.dumps(evidence))
 
 
 class RagConstraintTests(unittest.TestCase):
+    def test_requires_clarification_only_for_generic_request(self):
+        self.assertTrue(requires_clarification("Посоветуй хорошее основание"))
+        self.assertFalse(
+            requires_clarification("Посоветуй быстрое карбоновое основание")
+        )
+        self.assertEqual(CLARIFYING_QUESTION.count("?"), 1)
+
     def test_extracts_ruble_budget(self):
         self.assertEqual(extract_max_price_rub("бюджет до 6 000 ₽"), Decimal("6000"))
         self.assertEqual(extract_max_price_rub("не дороже 6,5 тысяч"), Decimal("6500.0"))
@@ -126,6 +169,7 @@ class GeminiGenerationResponseTests(unittest.TestCase):
             "USER_QUESTION: test",
             system_instruction="Используй только каталог",
             max_output_tokens=321,
+            temperature=0,
         )
 
         self.assertEqual(answer, "Ответ [1].")
@@ -136,6 +180,7 @@ class GeminiGenerationResponseTests(unittest.TestCase):
             kwargs["json"]["generationConfig"]["maxOutputTokens"],
             321,
         )
+        self.assertEqual(kwargs["json"]["generationConfig"]["temperature"], 0)
         self.assertEqual(
             kwargs["json"]["systemInstruction"]["parts"][0]["text"],
             "Используй только каталог",
