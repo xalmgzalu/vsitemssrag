@@ -1,4 +1,21 @@
-# Generated data
+# Локальные генерируемые данные
 
-Каталог `exports/` предназначен для локальных JSON-выгрузок парсера. Сами
-выгрузки генерируются во время запуска и не добавляются в Git.
+`exports/` содержит JSON-каталог, агрегаты пилота отзывов, checkpoint A/B,
+локальные решения аудита и JSONL-диагностику отклонённых ответов.
+Выгрузки и логи исключены из Git; секреты хранятся отдельно в `.env`.
+Полные тексты внешних отзывов не сохраняются.
+
+Основные файлы текущей проверки:
+
+- `review_enrichment_pilot_v2.json` — фиксированный evidence-набор.
+- `enrichment_ab_results_v5.json` и `enrichment_ab_results_v5_audit.json` —
+  завершённый v5 и построчные решения агента.
+- `enrichment_ab_results_v6.json` и `enrichment_ab_results_v6_audit.json` —
+  завершённый прогон после исправлений по v5 и построчные решения агента.
+- `rag_validation_rejections.jsonl` — исходный/итоговый текст и ошибки validation.
+
+Новый клон не содержит этих файлов. Сводки и хеши для передачи проекта — в
+[CURRENT_STATE.md](../docs/CURRENT_STATE.md) и
+[AB_V5_AUDIT.md](../docs/AB_V5_AUDIT.md) /
+[AB_V6_AUDIT.md](../docs/AB_V6_AUDIT.md); команды — в
+[evals/README.md](../evals/README.md).
