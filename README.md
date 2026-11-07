@@ -233,9 +233,10 @@ uv run python evals/run_enrichment_ab.py
 Флаг `--restart` нужен только для намеренного запуска с нуля и перезаписывает
 output. По умолчанию используются evidence-файл
 `review_enrichment_pilot_v2.json` и checkpoint
-`data/exports/enrichment_ab_results_v6.json`; текущий протокол —
-`evals/enrichment_ab_protocol_v6.json`. Результат v5 и его аудит сохранены
-отдельно в [AB_V5_AUDIT.md](docs/AB_V5_AUDIT.md). Исторический v4 сохранён отдельно. При изменении
+`data/exports/enrichment_ab_results_v7.json`; текущий протокол —
+`evals/enrichment_ab_protocol_v7.json`. Полный v7 ещё не запускался.
+Исторические v5/v6 и их аудиты сохранены отдельно:
+[v5](docs/AB_V5_AUDIT.md), [v6](docs/AB_V6_AUDIT.md). Исторический v4 также сохранён отдельно. При изменении
 поведения следует сохранить прежний результат и создать новую версию протокола
 с отдельным output. Подробности — в [evals/README.md](evals/README.md).
 
