@@ -8,6 +8,8 @@ from vsitemssrag.rag.constraints import (
     extract_max_price_rub,
     products_within_budget,
     requires_clarification,
+    no_budget_matches_answer,
+    select_context_products,
 )
 from vsitemssrag.rag.context import RAG_SYSTEM_INSTRUCTION, build_rag_prompt
 from vsitemssrag.rag.gemini import (
@@ -80,14 +82,46 @@ class RagContextTests(unittest.TestCase):
         catalog = json.loads(prompt.split("\n\nCATALOG_DATA:\n", 1)[1])
         evidence = catalog[0]["community_evidence"]
         self.assertIn(
-            "Контроль упоминается в 2 из 5 просмотренных отзывов [1].",
-            evidence["summary_lines"],
+            "Контроль упоминается [1].",
+            evidence["signals"],
         )
+        self.assertNotIn("2 из 5", prompt)
+        self.assertNotIn("summary_lines", evidence)
         self.assertNotIn("raw_review_text", evidence)
         self.assertNotIn("review_urls", json.dumps(evidence))
 
 
 class RagConstraintTests(unittest.TestCase):
+    def test_budget_edges_never_fall_back_to_unfiltered_candidates(self):
+        cases = [
+            ([{"price": 6001}, {"price": "9000"}], []),
+            ([{"price": None}, {}], []),
+            ([{"price": "6000.00"}], ["6000.00"]),
+            ([{"price": 6001}, {"price": 5000}, {"price": None}, {"price": 6000}], [5000, 6000]),
+            ([], []),
+            ([{"price": value} for value in ("NaN", "sNaN", "Infinity", "-Infinity", "bad", 0, -1)], []),
+        ]
+        for candidates, expected in cases:
+            with self.subTest(candidates=candidates):
+                result = select_context_products(candidates, Decimal("6000"), limit=6)
+                self.assertEqual([p["price"] for p in result], expected)
+
+    def test_budget_selection_preserves_order_and_limit(self):
+        products = [{"price": 8000}, {"price": 5999}, {"price": 6000}, {"price": 1000}]
+        self.assertEqual(
+            select_context_products(products, Decimal("6000"), limit=2),
+            products[1:3],
+        )
+        self.assertEqual(select_context_products(products, None, limit=2), products[:2])
+
+    def test_no_budget_matches_message_is_exact_and_formats_decimal(self):
+        self.assertEqual(
+            no_budget_matches_answer(Decimal("1000.00")),
+            "По вашему запросу не найдены варианты до 1000 ₽. "
+            "Попробуйте изменить критерии поиска или увеличить бюджет.",
+        )
+        self.assertIn("1000.5 ₽", no_budget_matches_answer(Decimal("1000.50")))
+
     def test_requires_clarification_only_for_generic_request(self):
         self.assertTrue(requires_clarification("Посоветуй хорошее основание"))
         self.assertFalse(

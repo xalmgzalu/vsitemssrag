@@ -4,6 +4,15 @@ from vsitemssrag.rag.evaluation import answer_citations, grade_answer
 
 
 class RagEvaluationTests(unittest.TestCase):
+    def test_accepts_noncomparability_synonym_after_long_scale_description(self):
+        answer = (
+            "Варианты [1] и [2]. Числовые показатели скорости и контроля у разных "
+            "брендов указаны по собственным шкалам производителей, поэтому их "
+            "нельзя напрямую сопоставлять как единую шкалу."
+        )
+        products = [{"name": "A Carbon", "brand": "A"}, {"name": "B Carbon", "brand": "B"}]
+        self.assertTrue(grade_answer({"id": "fast_attack_carbon"}, answer, products)["passed"])
+
     def test_extracts_grouped_citations(self):
         self.assertEqual(answer_citations("Варианты [1, 3, 6] и [2]."), [1, 2, 3, 6])
 
@@ -12,6 +21,7 @@ class RagEvaluationTests(unittest.TestCase):
         products = [
             {
                 "name": "Defensive",
+                "characteristics": {"Тип основания": "DEF"},
                 "community_evidence": {
                     "reviews_sampled": 5,
                     "relations": {

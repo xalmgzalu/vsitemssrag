@@ -7,9 +7,10 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from typing import Any
 
-from vsitemssrag.rag.validation import validate_generated_answer
+from vsitemssrag.rag.validation import validate_generated_answer, has_unsupported_speed_superlative
+from vsitemssrag.rag.constraints import extract_max_price_rub, no_budget_matches_answer
 
-GRADER_VERSION = 3
+GRADER_VERSION = 7
 
 
 _CITATION_GROUP = re.compile(r"\[((?:\d+\s*,\s*)*\d+)]")
@@ -25,14 +26,9 @@ _INSUFFICIENT = re.compile(
 )
 _CROSS_BRAND_CAVEAT = re.compile(
     r"(?:шкал[а-я]*[^.!?\n]{0,80}(?:различ|разн|несопостав)|"
-    r"нельзя[^.!?\n]{0,80}(?:напрямую\s+)?сравнива|"
-    r"не(?:льзя|корректно)[^.!?\n]{0,80}сравнива)",
-    re.IGNORECASE,
-)
-_UNSUPPORTED_SPEED_SUPERLATIVE = re.compile(
-    r"(?:сам(?:ый|ая|ое|ые)|наиболее)[^.!?\n]{0,40}"
-    r"(?:быстр|высок[а-я]*\s+скорост)|"
-    r"максимальн[а-я]*[^.!?\n]{0,40}скорост",
+    r"нельзя[^.!?\n]{0,80}(?:сравнива|сопоставля)|"
+    r"не(?:льзя|корректно)[^.!?\n]{0,80}(?:сравнива|сопоставля)|"
+    r"не\s+могут[^.!?\n]{0,40}(?:сравнив|сопостав))",
     re.IGNORECASE,
 )
 
@@ -131,6 +127,14 @@ def grade_answer(
 ) -> dict[str, Any]:
     """Оценить только заранее формализуемые свойства, без LLM-as-a-judge."""
     case_id = str(case.get("id") or "")
+    max_price = extract_max_price_rub(str(case.get("question") or ""))
+    if not products and max_price is not None:
+        passed = answer.strip() == no_budget_matches_answer(max_price)
+        return {
+            "passed": passed,
+            "citations": answer_citations(answer),
+            "checks": [_check("no_budget_matches", passed, "честный ответ без рекомендаций")],
+        }
     citations = answer_citations(answer)
     validation_question = str(case.get("question") or "")
     if case_id == "defense_long_pips" and not validation_question:
@@ -160,7 +164,7 @@ def grade_answer(
 
     if case_id == "beginner_control_budget":
         max_price = Decimal(str(case["max_price_rub"]))
-        cited_products = [products[index - 1] for index in citations]
+        cited_products = [products[index - 1] for index in citations if 1 <= index <= len(products)]
         prices: list[Decimal] = []
         for product in cited_products:
             try:
@@ -184,7 +188,7 @@ def grade_answer(
         )
 
     elif case_id == "fast_attack_carbon":
-        cited_products = [products[index - 1] for index in citations]
+        cited_products = [products[index - 1] for index in citations if 1 <= index <= len(products)]
         carbon = re.compile(
             r"(?:carbon|carbo|карбон|композит|alc|zlc|zylon|aramid)",
             re.IGNORECASE,
@@ -207,7 +211,7 @@ def grade_answer(
                 ),
                 _check(
                     "no_unsupported_speed_superlative",
-                    not _UNSUPPORTED_SPEED_SUPERLATIVE.search(answer),
+                    not has_unsupported_speed_superlative(answer),
                     "нельзя объявлять самый быстрый вариант без общей шкалы",
                 ),
             ]

@@ -162,6 +162,7 @@ venv.bak/
 # Generated catalog exports
 data/exports/*.json
 data/exports/*.tmp
+data/exports/*.jsonl
 data/tennis-db/
 
 # OS and editor-local files

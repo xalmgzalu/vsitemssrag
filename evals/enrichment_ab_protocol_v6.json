@@ -1,0 +1,75 @@
+{
+  "experiment_id": "community_evidence_pilot_v6",
+  "conditions": {
+    "baseline": "VistaSport retrieval and catalog fields only",
+    "enriched": "Same retrieval, model, system instruction and temperature, plus matched community aggregates"
+  },
+  "controls": {
+    "case_count": 5,
+    "context_products": 6,
+    "repetitions_per_condition": 3,
+    "temperature": 0,
+    "generation_request_interval_seconds": 15,
+    "deterministic_clarification_guard": true,
+    "long_pips_evidence": "directional_positive_negative_unclear",
+    "evidence_sentences": "code_appended_only_for_cited_products",
+    "long_pips_requires_explicit_no_positive_evidence_disclaimer": true,
+    "cross_brand_comparative_language_validated": true,
+    "evidence_validation": "product_plus_semantic_plus_n_of_m",
+    "raw_review_text_allowed": false,
+    "candidate_matches_allowed": false,
+    "budget_empty_outcome": "deterministic_refusal_no_generation",
+    "model_evidence": "qualitative_signals_only_no_counts",
+    "model_review_statistics_allowed": false,
+    "final_assembled_answer_validated": true,
+    "rejection_diagnostics": "local_jsonl_model_answer_final_answer_errors",
+    "grader_version": 7,
+    "validator_version": 7,
+    "catalog_fallback_after_validation_rejections": true,
+    "fallback_origin_recorded": true,
+    "long_pips_explicit_catalog_def_required": true,
+    "soft_feel_query_must_be_addressed": true
+  },
+  "primary_metric": "fully passed case generations / all case generations",
+  "secondary_metrics": [
+    "per-case pass rate",
+    "matched product coverage",
+    "matched products with sampled reviews",
+    "review count sampled",
+    "signal product coverage"
+  ],
+  "case_requirements": {
+    "beginner_control_budget": [
+      "at least one cited product",
+      "all cited products cost at most 6000 RUB",
+      "answer addresses control"
+    ],
+    "fast_attack_carbon": [
+      "all cited products have an explicit carbon/composite marker",
+      "multiple manufacturer scales get an explicit non-comparability caveat",
+      "no unsupported fastest/speed-maximum claim"
+    ],
+    "defense_long_pips": [
+      "compatibility is either withheld for insufficient data or tied to an exact N-of-M review aggregate",
+      "available long-pips evidence must be used"
+    ],
+    "soft_inner_carbon": [
+      "answer addresses soft feel",
+      "soft feel is tied to a direct field/exact aggregate or explicitly withheld"
+    ],
+    "underspecified_request": [
+      "no product is recommended before clarification",
+      "exactly one relevant clarifying question"
+    ]
+  },
+  "quality_gate": {
+    "full_planned_answers": 30,
+    "enriched_manual_audit_pass_minimum": 12,
+    "enriched_manual_audit_total": 15,
+    "numeric_evidence_errors": 0,
+    "unsupported_compatibility_claims": 0,
+    "automated_grade_is_not_manual_audit": true
+  },
+  "implementation_revision": 1,
+  "previous_experiment": "v5 revision 5 completed; strict agent audit baseline 10/15, enriched 11/15; see docs/AB_V5_AUDIT.md"
+}

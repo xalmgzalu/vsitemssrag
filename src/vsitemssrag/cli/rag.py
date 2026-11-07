@@ -27,8 +27,9 @@ from vsitemssrag.rag import (
     GeminiGenerationError,
     extract_max_price_rub,
     generate_advisor_answer,
-    products_within_budget,
+    no_budget_matches_answer,
     requires_clarification,
+    select_context_products,
 )
 from vsitemssrag.settings import ConfigurationError, load_env, require_setting
 from vsitemssrag.storage.postgres import Database, redact_secrets
@@ -145,17 +146,12 @@ def run_ask(args: argparse.Namespace) -> int:
                 only_available=not args.include_unavailable,
             )
 
-        products = list(candidates[: args.limit])
-        if max_price is not None:
-            within_budget = products_within_budget(
-                candidates,
-                max_price,
-                limit=args.limit,
-            )
-            if within_budget:
-                products = list(within_budget)
+        products = select_context_products(candidates, max_price, limit=args.limit)
 
         if not products:
+            if max_price is not None:
+                print(no_budget_matches_answer(max_price))
+                return 0
             print("Подходящие товары не найдены. Сначала запустите команду embed.")
             return 0
 

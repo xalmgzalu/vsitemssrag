@@ -68,6 +68,8 @@ def products_within_budget(
     limit: int,
 ) -> list[Mapping[str, Any]]:
     """Оставить товары с известной ценой, не превышающей строгий бюджет."""
+    if limit <= 0 or not max_price.is_finite() or max_price <= 0:
+        raise ValueError("limit и конечный бюджет должны быть положительными")
     matches: list[Mapping[str, Any]] = []
     for product in products:
         raw_price = product.get("price")
@@ -77,8 +79,30 @@ def products_within_budget(
             price = Decimal(str(raw_price))
         except InvalidOperation:
             continue
-        if price <= max_price:
+        if price.is_finite() and 0 < price <= max_price:
             matches.append(product)
         if len(matches) == limit:
             break
     return matches
+
+
+def select_context_products(
+    products: Sequence[Mapping[str, Any]],
+    max_price: Decimal | None,
+    *,
+    limit: int,
+) -> list[Mapping[str, Any]]:
+    """Общий отбор для CLI и eval; пустой бюджетный результат не заменяется."""
+    if max_price is not None:
+        return products_within_budget(products, max_price, limit=limit)
+    return list(products[:limit])
+
+
+def no_budget_matches_answer(max_price: Decimal) -> str:
+    amount = format(max_price, "f")
+    if "." in amount:
+        amount = amount.rstrip("0").rstrip(".")
+    return (
+        f"По вашему запросу не найдены варианты до {amount} ₽. "
+        "Попробуйте изменить критерии поиска или увеличить бюджет."
+    )

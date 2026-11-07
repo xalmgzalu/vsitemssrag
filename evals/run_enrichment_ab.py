@@ -27,8 +27,8 @@ from vsitemssrag.rag import (
     GeminiGenerationError,
     extract_max_price_rub,
     generate_advisor_answer,
-    products_within_budget,
     requires_clarification,
+    select_context_products,
 )
 from vsitemssrag.rag.context import RAG_SYSTEM_INSTRUCTION
 from vsitemssrag.rag.evaluation import GRADER_VERSION, grade_answer
@@ -39,9 +39,9 @@ from vsitemssrag.storage.postgres import Database
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES = ROOT / "evals" / "rag_cases.json"
-DEFAULT_PROTOCOL = ROOT / "evals" / "enrichment_ab_protocol.json"
+DEFAULT_PROTOCOL = ROOT / "evals" / "enrichment_ab_protocol_v6.json"
 DEFAULT_EVIDENCE = ROOT / "data" / "exports" / "review_enrichment_pilot_v2.json"
-DEFAULT_OUTPUT = ROOT / "data" / "exports" / "enrichment_ab_results_v4.json"
+DEFAULT_OUTPUT = ROOT / "data" / "exports" / "enrichment_ab_results_v6.json"
 
 
 def positive(value: str) -> int:
@@ -222,16 +222,8 @@ def _retrieve_cases(
                 limit=candidate_limit,
                 only_available=True,
             )
-            products = list(candidates[:limit])
-            if max_price is not None:
-                within_budget = products_within_budget(
-                    candidates,
-                    max_price,
-                    limit=limit,
-                )
-                if within_budget:
-                    products = list(within_budget)
-            if not products:
+            products = select_context_products(candidates, max_price, limit=limit)
+            if not products and max_price is None:
                 raise RuntimeError(f"нет retrieval-результатов для {case['id']}")
 
             enriched_products = attach_community_evidence(products, evidence_by_id)
@@ -280,7 +272,7 @@ def _generate_with_retries(
                 max_output_tokens=max_output_tokens,
                 temperature=0,
                 correction_delay=correction_delay,
-            ).strip()
+            )
         except (GeminiGenerationError, requests.RequestException) as error:
             if attempt == attempts or not _retryable_generation_error(error):
                 raise
@@ -370,7 +362,10 @@ def main() -> int:
             products = case_result["products"]
             enriched_products = attach_community_evidence(products, evidence_by_id)
             print(f"[{case_index}/{len(cases)}] generation: {case['id']}", flush=True)
-            deterministic = requires_clarification(case["question"])
+            no_budget_matches = (
+                not products and extract_max_price_rub(case["question"]) is not None
+            )
+            deterministic = requires_clarification(case["question"]) or no_budget_matches
             for repeat in range(1, args.repeats + 1):
                 for condition, context_products in (
                     ("baseline", products),
@@ -424,9 +419,11 @@ def main() -> int:
                             "repeat": repeat,
                             "answer": answer,
                             "answer_origin": (
-                                "deterministic_clarification"
+                                "deterministic_no_budget_matches"
+                                if no_budget_matches
+                                else "deterministic_clarification"
                                 if deterministic
-                                else "gemini_validated"
+                                else getattr(answer, "origin", "gemini_validated")
                             ),
                             "grade": grade_answer(case, answer, context_products),
                         }

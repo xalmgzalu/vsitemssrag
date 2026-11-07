@@ -5,8 +5,10 @@ from vsitemssrag.rag.context import RAG_SYSTEM_INSTRUCTION, build_rag_prompt
 from vsitemssrag.rag.constraints import (
     CLARIFYING_QUESTION,
     extract_max_price_rub,
+    no_budget_matches_answer,
     products_within_budget,
     requires_clarification,
+    select_context_products,
 )
 from vsitemssrag.rag.gemini import (
     GENERATION_MODEL,
@@ -23,6 +25,8 @@ __all__ = [
     "build_rag_prompt",
     "extract_max_price_rub",
     "generate_advisor_answer",
+    "no_budget_matches_answer",
     "products_within_budget",
     "requires_clarification",
+    "select_context_products",
 ]
