@@ -81,8 +81,10 @@ def render_answer(result: AdviceResult) -> str:
         return f"({label} {', '.join(map(str, numbers))})"
 
     seen_product = False
+    active_ref: int | None = None
     for raw in body.splitlines():
         if not raw.strip():
+            active_ref = None
             continue
         line = _LIST_PREFIX.sub("", raw.strip())
         # Самостоятельная оговорка становится короткой сноской. Смешанные
@@ -120,9 +122,16 @@ def render_answer(result: AdviceResult) -> str:
             if clean:
                 notes[ref].append(clean)
             seen_product = True
+            active_ref = ref
         else:
             clean = _clean_text(_CITATION.sub(display_refs, line))
-            (shared if seen_product or refs else intro).append(clean)
+            if not refs and active_ref is not None:
+                # Продолжение карточки (например, цена/оговорка без повторной
+                # цитаты) относится к её заголовку до пустой строки.
+                notes[active_ref].append(clean)
+            else:
+                (shared if seen_product or refs else intro).append(clean)
+                active_ref = None
             seen_product = seen_product or bool(refs)
 
     sections = ["\n".join(intro)] if intro else []

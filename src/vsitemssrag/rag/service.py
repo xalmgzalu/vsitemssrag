@@ -15,10 +15,11 @@ from vsitemssrag.embeddings import (
 from vsitemssrag.rag.advisor import generate_advisor_answer
 from vsitemssrag.rag.constraints import (
     CLARIFYING_QUESTION, extract_max_price_rub, no_budget_matches_answer,
-    requires_clarification, select_context_products,
+    requires_clarification,
 )
 from vsitemssrag.rag.evidence import attach_community_evidence, load_community_evidence
 from vsitemssrag.rag.gemini import GENERATION_MODEL, GeminiGenerationClient, GeminiGenerationError
+from vsitemssrag.rag.reranker import candidate_pool_limit, select_ranked_products
 from vsitemssrag.rag.validation import answer_citations
 from vsitemssrag.settings import ConfigurationError, load_env, require_setting
 from vsitemssrag.storage.postgres import Database
@@ -67,12 +68,11 @@ def ask_catalog(
         query_embedding = client.embed(build_search_query(question))
     with Database.from_env() as database:
         database.apply_migrations()
-        candidate_limit = min(max(limit * 5, 20), 100) if max_price else limit
         candidates = database.match_products(
-            query_embedding, model=EMBEDDING_MODEL, limit=candidate_limit,
+            query_embedding, model=EMBEDDING_MODEL, limit=candidate_pool_limit(limit),
             only_available=not include_unavailable,
         )
-    products = select_context_products(candidates, max_price, limit=limit)
+    products = select_ranked_products(question, candidates, max_price, limit=limit)
     if not products:
         if max_price is not None:
             return AdviceResult(no_budget_matches_answer(max_price), origin="deterministic_no_budget_matches")

@@ -28,9 +28,9 @@ from vsitemssrag.rag import (
     extract_max_price_rub,
     generate_advisor_answer,
     requires_clarification,
-    select_context_products,
 )
 from vsitemssrag.rag.context import RAG_SYSTEM_INSTRUCTION
+from vsitemssrag.rag.reranker import RETRIEVAL_VERSION, candidate_pool_limit, select_ranked_products
 from vsitemssrag.rag.evaluation import GRADER_VERSION, grade_answer
 from vsitemssrag.rag.validation import VALIDATOR_VERSION
 from vsitemssrag.settings import load_env, require_setting
@@ -39,9 +39,9 @@ from vsitemssrag.storage.postgres import Database
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES = ROOT / "evals" / "rag_cases.json"
-DEFAULT_PROTOCOL = ROOT / "evals" / "enrichment_ab_protocol_v6.json"
+DEFAULT_PROTOCOL = ROOT / "evals" / "enrichment_ab_protocol_v7.json"
 DEFAULT_EVIDENCE = ROOT / "data" / "exports" / "review_enrichment_pilot_v2.json"
-DEFAULT_OUTPUT = ROOT / "data" / "exports" / "enrichment_ab_results_v6.json"
+DEFAULT_OUTPUT = ROOT / "data" / "exports" / "enrichment_ab_results_v7.json"
 
 
 def positive(value: str) -> int:
@@ -165,6 +165,12 @@ def _configuration(
         "generation_delay": generation_delay,
         "system_instruction_identical": True,
         "retrieval_identical": True,
+        "retrieval_version": RETRIEVAL_VERSION,
+        "retrieval_code_sha256": {
+            name: _file_sha256(ROOT / "src" / "vsitemssrag" / "rag" / name)
+            for name in ("reranker.py", "popularity.py", "materials.py", "materials_ontology.json", "context.py", "constraints.py")
+        },
+        "catalog_adapter_sha256": _file_sha256(ROOT / "src" / "vsitemssrag" / "storage" / "postgres.py"),
         "evidence_file": str(args.evidence_file.resolve()),
         "evidence_sha256": _file_sha256(args.evidence_file),
         "cases_sha256": _file_sha256(args.cases),
@@ -215,14 +221,13 @@ def _retrieve_cases(
         ):
             print(f"[{case_index}/{len(cases)}] retrieval: {case['id']}", flush=True)
             max_price = extract_max_price_rub(case["question"])
-            candidate_limit = min(max(limit * 5, 20), 100) if max_price else limit
             candidates = database.match_products(
                 query_embedding,
                 model=EMBEDDING_MODEL,
-                limit=candidate_limit,
+                limit=candidate_pool_limit(limit),
                 only_available=True,
             )
-            products = select_context_products(candidates, max_price, limit=limit)
+            products = select_ranked_products(case["question"], candidates, max_price, limit=limit)
             if not products and max_price is None:
                 raise RuntimeError(f"нет retrieval-результатов для {case['id']}")
 

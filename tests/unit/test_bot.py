@@ -221,6 +221,19 @@ class PresentationTests(unittest.TestCase):
         result = AdviceResult("ALL [1], без композита [1].", [{"name": "A"}])
         self.assertIn("• Особенности: ALL, без композита.", render_answer(result))
 
+    def test_uncited_bullet_continuations_stay_with_their_product(self):
+        result = AdviceResult(
+            "1. **Второй** [2]\n - Цена: 6960.00 RUB\n - Мягкость не подтверждена.\n\n"
+            "2. **Первый** [1]\n - Цена: 2755.00 руб.\n\nОбщее сравнение.",
+            [{"name": "Первый", "price": 2755}, {"name": "Второй", "price": 6960}],
+        )
+        first, second = render_answer(result).split("2️⃣", 1)
+        self.assertIn("Цена: 6 960 ₽", first)
+        self.assertIn("Мягкость не подтверждена.", first)
+        self.assertNotIn("Цена: 2 755 ₽", first)
+        self.assertIn("Цена: 2 755 ₽", second)
+        self.assertIn("\n\nОбщее сравнение.", second)
+
     def test_no_cards_or_presentation_rewrite_without_cited_products(self):
         for text in ("Уточните бюджет?", "По вашему запросу не найдены варианты до 1000 ₽."):
             self.assertEqual(render_answer(AdviceResult(text)), text)

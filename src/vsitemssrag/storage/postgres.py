@@ -429,13 +429,15 @@ class Database:
     ) -> list[dict[str, Any]]:
         cursor = self.connection.execute(
             """
-            select *
+            select matches.*, products.description
             from public.match_products(
                 %s::extensions.vector(768),
                 %s,
                 %s,
                 %s
-            )
+            ) as matches
+            join public.products as products on products.id = matches.product_id
+            order by matches.similarity desc, matches.product_id
             """,
             (vector_literal(embedding), model, limit, only_available),
         )

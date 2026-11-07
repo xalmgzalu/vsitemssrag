@@ -24,7 +24,8 @@ _SPECIFICITY_PATTERN = re.compile(
     r"\b(?:нович|начина|любител|проф|бюджет|руб|₽|атак|напад|защит|"
     r"универс|контрол|скорост|быстр|медлен|карбон|carbon|композит|inner|"
     r"внутрен|мягк|ж[её]стк|шип|pips?|off|all|def|доник|donic|stiga|"
-    r"butterfly|xiom|yasaka|nittaku|victas|joola)\w*\b",
+    r"butterfly|xiom|yasaka|nittaku|victas|joola|limba|лимб|koto|кото|"
+    r"hinoki|хиноки|balsa|бальз|бальс|outer|dotec|дотек|пробк|анатом|эргоном)\w*\b",
     flags=re.IGNORECASE,
 )
 
