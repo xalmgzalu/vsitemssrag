@@ -19,3 +19,8 @@
 [AB_V5_AUDIT.md](../docs/AB_V5_AUDIT.md) /
 [AB_V6_AUDIT.md](../docs/AB_V6_AUDIT.md); команды — в
 [evals/README.md](../evals/README.md).
+
+
+`bot/feedback.sqlite3` содержит локальную историю доставленных ответов и оценки
+Telegram-пилота; вся папка `bot/` исключена из Git. Схема и правила подсчёта —
+в [TELEGRAM_BOT.md](../docs/TELEGRAM_BOT.md).

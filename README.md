@@ -83,6 +83,23 @@ GEMINI_API_KEY=
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/postgres
 ```
 
+## Telegram-бот
+
+TASK-3 реализован. Локальный пилот: [@vistasportassistant_bot](https://t.me/vistasportassistant_bot).
+Добавьте `TELEGRAM_BOT_TOKEN` в `.env` и используйте подготовленный каталог
+с evidence-пилотом v2:
+
+```bash
+uv run vsitemssrag bot run --check
+uv run vsitemssrag bot run
+```
+
+Бот принимает текстовые запросы, использует тот же RAG-сервис, что CLI,
+показывает инлайн-ссылки только на выбранные товары и сохраняет 👍/👎 локально.
+Каждый запрос независим; это подбор оснований без памяти диалога.
+Подготовка данных, параметры и проверка — в
+[TELEGRAM_BOT.md](docs/TELEGRAM_BOT.md).
+
 ## Векторное хранилище
 
 Команда миграции включает расширение `pgvector` в Supabase и создаёт таблицу
@@ -242,6 +259,7 @@ TableTennisDaily был исходным кандидатом, но автома
 │   └── exports/
 ├── docs/                         # проектная документация
 ├── src/vsitemssrag/              # устанавливаемый Python-пакет
+│   ├── bot/                      # Telegram, кнопки и локальный feedback
 │   ├── cli/                      # команды приложения
 │   ├── scraping/                 # HTTP и разбор VistaSport
 │   ├── embeddings/               # embedding-тексты и клиент Gemini
