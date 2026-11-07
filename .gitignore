@@ -164,6 +164,7 @@ data/exports/*.json
 data/exports/*.tmp
 data/exports/*.jsonl
 data/tennis-db/
+data/bot/
 
 # OS and editor-local files
 .DS_Store

@@ -17,6 +17,20 @@ from decimal import Decimal
 
 
 class BudgetFlowTests(unittest.TestCase):
+    def test_empty_search_without_budget_does_not_leak_cli_instructions_to_bot(self):
+        from vsitemssrag.rag.service import ask_catalog
+        with contextlib.ExitStack() as stack:
+            for name in ("require_setting", "generation_model", "GeminiEmbeddingClient"):
+                stack.enter_context(patch("vsitemssrag.rag.service." + name))
+            database = stack.enter_context(patch("vsitemssrag.rag.service.Database.from_env"))
+            database.return_value.__enter__.return_value.match_products.return_value = []
+            generator = stack.enter_context(patch("vsitemssrag.rag.service.GeminiGenerationClient"))
+            result = ask_catalog("Ищу быстрое основание")
+        generator.assert_not_called()
+        self.assertEqual(result.origin, "no_search_results")
+        self.assertEqual(result.cited_products, [])
+        self.assertNotIn("embed", result.text)
+
     def test_runner_completes_and_records_deterministic_empty_budget_answers(self):
         with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
             root = Path(directory)
@@ -51,12 +65,12 @@ class BudgetFlowTests(unittest.TestCase):
     def test_cli_handles_empty_budget_without_generation_or_sources(self):
         for candidates in ([], [{"price": 1001}], [{"price": None}]):
             with self.subTest(candidates=candidates), contextlib.ExitStack() as stack:
-                stack.enter_context(patch("vsitemssrag.cli.rag.require_setting", return_value="test"))
-                stack.enter_context(patch("vsitemssrag.cli.rag._generation_model", return_value="test"))
-                stack.enter_context(patch("vsitemssrag.cli.rag.GeminiEmbeddingClient"))
-                database = stack.enter_context(patch("vsitemssrag.cli.rag.Database.from_env"))
+                stack.enter_context(patch("vsitemssrag.rag.service.require_setting", return_value="test"))
+                stack.enter_context(patch("vsitemssrag.rag.service.generation_model", return_value="test"))
+                stack.enter_context(patch("vsitemssrag.rag.service.GeminiEmbeddingClient"))
+                database = stack.enter_context(patch("vsitemssrag.rag.service.Database.from_env"))
                 database.return_value.__enter__.return_value.match_products.return_value = candidates
-                generator = stack.enter_context(patch("vsitemssrag.cli.rag.GeminiGenerationClient"))
+                generator = stack.enter_context(patch("vsitemssrag.rag.service.GeminiGenerationClient"))
                 output = stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
                 args = build_parser().parse_args(["ask", "Основание до 1000 руб"])
                 self.assertEqual(run_ask(args), 0)
@@ -72,13 +86,13 @@ class BudgetFlowTests(unittest.TestCase):
             {"name": "Cheaper", "price": 500, "source_url": "https://example.test/2"},
         ]
         with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("vsitemssrag.cli.rag.require_setting", return_value="test"))
-            stack.enter_context(patch("vsitemssrag.cli.rag._generation_model", return_value="test"))
-            stack.enter_context(patch("vsitemssrag.cli.rag.GeminiEmbeddingClient"))
-            database = stack.enter_context(patch("vsitemssrag.cli.rag.Database.from_env"))
+            stack.enter_context(patch("vsitemssrag.rag.service.require_setting", return_value="test"))
+            stack.enter_context(patch("vsitemssrag.rag.service.generation_model", return_value="test"))
+            stack.enter_context(patch("vsitemssrag.rag.service.GeminiEmbeddingClient"))
+            database = stack.enter_context(patch("vsitemssrag.rag.service.Database.from_env"))
             database.return_value.__enter__.return_value.match_products.return_value = candidates
-            stack.enter_context(patch("vsitemssrag.cli.rag.GeminiGenerationClient"))
-            advisor = stack.enter_context(patch("vsitemssrag.cli.rag.generate_advisor_answer", return_value="Варианты [1, 2]."))
+            stack.enter_context(patch("vsitemssrag.rag.service.GeminiGenerationClient"))
+            advisor = stack.enter_context(patch("vsitemssrag.rag.service.generate_advisor_answer", return_value="Варианты [1, 2]."))
             output = stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
             self.assertEqual(run_ask(build_parser().parse_args(["ask", "Основание до 1000 руб"])), 0)
             self.assertEqual([p["price"] for p in advisor.call_args.args[2]], [1000, 500])

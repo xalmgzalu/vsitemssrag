@@ -6,6 +6,7 @@ import argparse
 from collections.abc import Sequence
 
 from vsitemssrag.cli import database as database_cli
+from vsitemssrag.cli import bot as bot_cli
 from vsitemssrag.cli import embeddings as embeddings_cli
 from vsitemssrag.cli import enrichment as enrichment_cli
 from vsitemssrag.cli import rag as rag_cli
@@ -18,6 +19,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="VistaSport RAG utilities",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+
+    bot_parser = commands.add_parser("bot", help="Telegram-консультант")
+    bot_cli.configure_parser(bot_parser)
 
     scrape_parser = commands.add_parser("scrape", help="запустить парсер каталога")
     scrape_cli.configure_parser(scrape_parser)
