@@ -66,17 +66,17 @@ def _normalize(value: str) -> str:
 
 
 def _citations(value: str) -> list[int]:
-    return sorted(
-        {
-            int(item.strip())
-            for group in _CITATION_GROUP.findall(value)
-            for item in group.split(",")
-        }
-    )
+    # Стабильный порядок диагностик валидатора не зависит от порядка вывода.
+    return sorted(answer_citations(value))
 
 
 def answer_citations(value: str) -> list[int]:
-    return _citations(value)
+    """Уникальные ссылки в порядке первого появления, включая группы [2, 1]."""
+    return list(dict.fromkeys(
+        int(item.strip())
+        for group in _CITATION_GROUP.findall(value)
+        for item in group.split(",")
+    ))
 
 
 def has_unsupported_speed_superlative(answer: str) -> bool:

@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from decimal import Decimal
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -21,10 +22,16 @@ from aiogram.types import CallbackQuery, Chat, Message, Update, User
 
 from vsitemssrag.bot.bot import BotConfig, create_router, send_text
 from vsitemssrag.bot.feedback import FeedbackStore
-from vsitemssrag.bot.presentation import answer_keyboard, is_catalog_url, split_text, telegram_html
+from vsitemssrag.bot.presentation import (
+    answer_keyboard, format_price, format_prices, is_catalog_url, render_answer,
+    split_text, telegram_html,
+)
 from vsitemssrag.cli.main import build_parser
 from vsitemssrag.cli.bot import SecretRedactingFormatter, run_bot
 from vsitemssrag.rag.service import AdviceResult
+from vsitemssrag.rag.context import render_community_evidence
+from vsitemssrag.rag.fallback import build_catalog_fallback
+from vsitemssrag.rag.validation import answer_citations
 
 TEST_TOKEN = "123456:" + "A" * 35
 
@@ -81,16 +88,142 @@ class PresentationTests(unittest.TestCase):
     def test_html_is_escaped_and_only_safe_bold_is_added(self):
         self.assertEqual(telegram_html('**Модель** <a href="evil">&'), '<b>Модель</b> &lt;a href="evil"&gt;&amp;')
 
-    def test_keyboard_uses_only_cited_catalog_products_and_keeps_reference_numbers(self):
+    def test_keyboard_uses_only_cited_catalog_products_with_display_numbers(self):
         result = AdviceResult("Вариант [2].", [
             {"name": "Unused", "source_url": "https://www.vistasport.ru/catalog/unused.html"},
             {"name": "Chosen", "source_url": "https://www.vistasport.ru/catalog/chosen.html"},
         ])
         keyboard = answer_keyboard(result, "a" * 32)
         self.assertEqual(len(keyboard.inline_keyboard), 2)
-        self.assertEqual(keyboard.inline_keyboard[0][0].text, "[2] Chosen")
+        self.assertEqual(keyboard.inline_keyboard[0][0].text, "1️⃣ Chosen")
         self.assertTrue(keyboard.inline_keyboard[0][0].url.endswith("chosen.html"))
         self.assertTrue(all(len(b.callback_data.encode()) <= 64 for b in keyboard.inline_keyboard[-1]))
+
+    def test_citations_keep_first_appearance_including_groups_and_duplicates(self):
+        self.assertEqual(answer_citations("Сначала [2, 1, 2], затем [3] и [1]."), [2, 1, 3])
+
+    def test_every_card_matches_button_even_for_reversed_and_grouped_references(self):
+        products = [
+            {"name": "Первый", "price": "2755.00", "source_url": "https://vistasport.ru/catalog/one"},
+            {"name": "Второй", "price": "6960.00", "source_url": "https://vistasport.ru/catalog/two"},
+            {"name": "Третий", "price": None, "source_url": "https://vistasport.ru/catalog/three"},
+        ]
+        for text, expected in (
+            ("1. Второй [2].\n2. Первый [1].\nСравните [2, 1].", [2, 1]),
+            ("Сравните [3, 2, 3] и [1].", [3, 2, 1]),
+            ("Третий [3]. Третий [3].", [3]),
+        ):
+            with self.subTest(text=text):
+                result = AdviceResult(text, products)
+                rendered = render_answer(result)
+                buttons = answer_keyboard(result, "a" * 32).inline_keyboard[:-1]
+                self.assertEqual([ref for ref, _ in result.cited_products], expected)
+                for index, (ref, row) in enumerate(zip(expected, buttons), 1):
+                    marker = f"{index}️⃣"
+                    product = products[ref - 1]
+                    self.assertIn(f"{marker} **{product['name']} — ", rendered)
+                    self.assertEqual(row[0].text, f"{marker} {product['name']}")
+                    self.assertEqual(row[0].url, product['source_url'])
+                self.assertEqual(answer_citations(rendered), [])
+
+    def test_prices_are_grouped_without_kopecks_and_only_currency_amounts_change(self):
+        cases = {
+            "6960.00 RUB": "6 960 ₽", "2755.00 руб.": "2 755 ₽",
+            "12 345,00 ₽": "12 345 ₽", "1\u202f234,00 RUB": "1 234 ₽",
+            "999.49 RUB": "999 ₽", "999.50 RUB": "1 000 ₽",
+            "0 руб.": "0 ₽", "5.7 мм, 5+2 слоёв, контроль 8+": "5.7 мм, 5+2 слоёв, контроль 8+",
+        }
+        for raw, expected in cases.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(format_prices(raw), expected)
+        self.assertEqual(format_price(Decimal("6960.00")), "6 960 ₽")
+        for invalid in (None, "NaN", "Infinity", -1, "unknown"):
+            self.assertEqual(format_price(invalid), "цена не указана")
+
+    def test_citation_spam_is_removed_and_catalog_fields_form_card(self):
+        result = AdviceResult(
+            "Вот вариант:\n1. **DONIC Original Dotec ALL** [2] — основание без композита [2] типа ALL [2] с ценой 6960.00 RUB.",
+            [{"name": "Unused"}, {"name": "DONIC Original Dotec ALL", "price": Decimal("6960"),
+             "characteristics": {"Тип основания": "ALL", "Количество слоев": "5", "Конструкция": "Без композита"}}],
+        )
+        rendered = render_answer(result)
+        self.assertIn("1️⃣ **DONIC Original Dotec ALL — 6 960 ₽**", rendered)
+        self.assertIn("• Тип и слои: ALL; 5 слоёв", rendered)
+        self.assertIn("• Особенности: основание без композита типа ALL с ценой 6 960 ₽.", rendered)
+        self.assertNotIn("[2]", rendered)
+        self.assertNotIn("RUB", rendered)
+        self.assertIn("[2]", result.text)  # Валидация/аудит используют исходный текст.
+
+    def test_scale_caveat_moves_to_footer_but_evidence_and_limitations_stay(self):
+        products = [{"name": "Защитное", "price": 4176, "community_evidence": {
+            "reviews_sampled": 5, "mentions": {"control": {"review_count": 4}},
+            "source_url": "https://reviews.test/blade",
+        }}]
+        text = (
+            "Вот вариант. Обратите внимание, что шкалы производителей могут различаться.\n"
+            "Защитное [1] — тип DEF [1]. Положительный опыт использования с длинными шипами не подтверждён [1].\n"
+            "Прямого подтверждения мягкости нет."
+        )
+        result = AdviceResult(text + "\n\n" + render_community_evidence(products, [1]), products)
+        rendered = render_answer(result)
+        self.assertLess(rendered.index("1️⃣"), rendered.index("ℹ️ Шкалы"))
+        self.assertIn("Контроль упоминается в 4 из 5 просмотренных отзывов.", rendered)
+        self.assertIn("Источник отзывов: https://reviews.test/blade", rendered)
+        self.assertIn("не доказывают пригодность", rendered)
+        self.assertIn("Положительный опыт использования с длинными шипами не подтверждён", rendered)
+        self.assertIn("Прямого подтверждения мягкости нет.", rendered)
+        self.assertEqual(answer_citations(rendered), [])
+
+    def test_unsafe_url_never_shifts_first_button_to_another_card(self):
+        result = AdviceResult("Варианты [2] и [1].", [
+            {"name": "Safe", "source_url": "https://vistasport.ru/catalog/safe"},
+            {"name": "Unsafe", "source_url": "https://evil.test/catalog/a"},
+        ])
+        keyboard = answer_keyboard(result, "a" * 32)
+        self.assertEqual(len(keyboard.inline_keyboard), 1)
+        self.assertTrue(all(b.url is None for b in keyboard.inline_keyboard[0]))
+
+    def test_mixed_scale_caveat_keeps_facts_and_correct_display_references(self):
+        result = AdviceResult(
+            "Шкалы производителей различаются, а мягкость модели [2] не подтверждена.\n"
+            "Варианты [2, 1].",
+            [{"name": "A"}, {"name": "B"}],
+        )
+        rendered = render_answer(result)
+        self.assertIn("мягкость модели (вариант 1) не подтверждена.", rendered)
+        self.assertGreater(rendered.index("ℹ️"), rendered.index("2️⃣"))
+        self.assertNotIn("[2]", rendered)
+
+    def test_fallback_keeps_catalog_numbers_and_evidence_for_each_correct_card(self):
+        products = [
+            {"name": "A", "price": "2755.00", "brand": "A", "characteristics": {"Скорость": "8+"},
+             "community_evidence": {"reviews_sampled": 5, "mentions": {"control": {"review_count": 2}}}},
+            {"name": "B", "price": "6960.00", "brand": "B", "characteristics": {"Скорость": "9"},
+             "community_evidence": {"reviews_sampled": 4, "mentions": {"control": {"review_count": 3}}}},
+        ]
+        raw = build_catalog_fallback("Хочу мягкое основание", products, [2, 1])
+        rendered = render_answer(AdviceResult(raw, products, "deterministic_catalog_fallback"))
+        first, second = rendered.split("2️⃣", 1)
+        self.assertIn("1️⃣ **B — 6 960 ₽**", first)
+        self.assertIn("3 из 4", first)
+        self.assertNotIn("2 из 5", first)
+        self.assertIn("2 из 5", second)
+        self.assertIn("Скорость: 8+.", second)
+        self.assertIn("Прямого подтверждения мягкости", rendered)
+
+    def test_baseline_does_not_gain_an_unvalidated_evidence_section(self):
+        result = AdviceResult("Вариант [1].", [{"name": "A", "community_evidence": {
+            "reviews_sampled": 5, "mentions": {"control": {"review_count": 2}},
+        }}])
+        self.assertNotIn("2 из 5", render_answer(result))
+
+    def test_name_prefix_does_not_remove_part_of_characteristic(self):
+        result = AdviceResult("ALL [1], без композита [1].", [{"name": "A"}])
+        self.assertIn("• Особенности: ALL, без композита.", render_answer(result))
+
+    def test_no_cards_or_presentation_rewrite_without_cited_products(self):
+        for text in ("Уточните бюджет?", "По вашему запросу не найдены варианты до 1000 ₽."):
+            self.assertEqual(render_answer(AdviceResult(text)), text)
 
     def test_no_product_buttons_for_clarification_or_empty_budget(self):
         self.assertEqual(len(answer_keyboard(AdviceResult("Уточните бюджет?"), "a" * 32).inline_keyboard), 1)
@@ -146,8 +279,9 @@ class BotDispatcherTests(unittest.IsolatedAsyncioTestCase):
         await self.feed("Новичок, основание до 6000")
         self.advisor.assert_called_once_with("Новичок, основание до 6000", evidence_file=self.config.evidence_file, timeout=30.0)
         answer = self.session.messages[-1]
-        self.assertIn("<b>Модель</b> &lt;unsafe&gt; &amp;", answer.text)
-        self.assertEqual(answer.reply_markup.inline_keyboard[0][0].text, "[2] Chosen")
+        self.assertIn("<b>Chosen — цена не указана</b>", answer.text)
+        self.assertIn("Модель &lt;unsafe&gt; &amp;", answer.text)
+        self.assertEqual(answer.reply_markup.inline_keyboard[0][0].text, "1️⃣ Chosen")
         with self.store.connect() as db:
             row = db.execute("select question, message_id, origin from responses").fetchone()
         self.assertEqual(row, ("Новичок, основание до 6000", answer.message_id, "gemini_validated"))
@@ -171,6 +305,24 @@ class BotDispatcherTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(db.execute("select vote from feedback").fetchall(), [(-1,)])
         acks = [m.text for m in self.session.calls if isinstance(m, AnswerCallbackQuery)]
         self.assertIn("Эта оценка уже учтена.", acks)
+
+    async def test_dispatcher_sends_numbered_cards_and_matching_buttons_in_model_order(self):
+        self.advisor.return_value = AdviceResult(
+            "Шкалы производителей различаются.\n"
+            "1. Chosen [2] — без композита [2], 6960.00 RUB.\n"
+            "2. Unused [1] — 2755.00 руб.",
+            [dict(self.result.products[0], price="2755.00"), dict(self.result.products[1], price="6960.00")],
+        )
+        await self.feed("Запрос")
+        sent = self.session.messages[-1]
+        self.assertLess(sent.text.index("1️⃣ <b>Chosen — 6 960 ₽</b>"), sent.text.index("2️⃣ <b>Unused — 2 755 ₽</b>"))
+        self.assertLess(sent.text.index("2️⃣"), sent.text.index("ℹ️"))
+        buttons = sent.reply_markup.inline_keyboard
+        self.assertEqual(buttons[0][0].url, self.result.products[1]['source_url'])
+        self.assertEqual(buttons[1][0].url, self.result.products[0]['source_url'])
+        self.assertEqual(answer_citations(sent.text), [])
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("select answer from responses").fetchone()[0], self.advisor.return_value.text)
 
     async def test_feedback_cannot_be_replayed_on_another_message(self):
         await self.feed("Запрос")

@@ -37,6 +37,7 @@ class AdviceResult:
 
     @property
     def cited_products(self) -> list[tuple[int, dict[str, Any]]]:
+        """Номера источников и товары в порядке первого упоминания в ответе."""
         return [
             (ref, self.products[ref - 1]) for ref in answer_citations(self.text)
             if 1 <= ref <= len(self.products)

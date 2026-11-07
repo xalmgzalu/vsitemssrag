@@ -11,6 +11,12 @@ from typing import Any
 from vsitemssrag.embeddings.documents import normalize_text
 
 
+COMMUNITY_EVIDENCE_HEADING = (
+    "Отзывы сообщества: ограниченная выборка, субъективные упоминания; "
+    "они не доказывают пригодность основания."
+)
+
+
 RAG_SYSTEM_INSTRUCTION = """\
 Ты консультант по основаниям для настольного тенниса.
 
@@ -179,10 +185,7 @@ def render_community_evidence(
         sections.append("\n".join(section))
     if not sections:
         return ""
-    return (
-        "Отзывы сообщества: ограниченная выборка, субъективные упоминания; "
-        "они не доказывают пригодность основания.\n\n" + "\n\n".join(sections)
-    )
+    return COMMUNITY_EVIDENCE_HEADING + "\n\n" + "\n\n".join(sections)
 
 
 def _product_record(index: int, product: Mapping[str, Any]) -> dict[str, Any]:

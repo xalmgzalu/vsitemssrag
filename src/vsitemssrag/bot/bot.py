@@ -15,7 +15,7 @@ from aiogram.types import CallbackQuery, LinkPreviewOptions, Message
 from aiogram.utils.chat_action import ChatActionSender
 
 from vsitemssrag.bot.feedback import FeedbackStore
-from vsitemssrag.bot.presentation import answer_keyboard, split_text, telegram_html
+from vsitemssrag.bot.presentation import answer_keyboard, render_answer, split_text, telegram_html
 from vsitemssrag.rag.service import AdviceResult, RAG_ERRORS, ask_catalog
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ def create_router(
                 store.create, message.chat.id, message.from_user.id, message.text, result,
             )
             keyboard = answer_keyboard(result, response_id)
-            chunks = split_text(result.text)
+            chunks = split_text(render_answer(result))
             for index, chunk in enumerate(chunks):
                 sent = await send_text(
                     message, chunk,
